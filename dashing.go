@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"text/template"
@@ -57,9 +56,7 @@ type Dashing struct {
 	// The location of the index.html file.
 	Index string `json:"index"`
 	// Selectors to match.
-	Selectors map[string]interface{} `json:"selectors"`
-	// Final form of the Selectors field.
-	selectors map[string]*Transform `json:"-"`
+	Selectors []*Selector `json:"selectors"`
 	// Entries that should be ignored.
 	Ignore []string `json:"ignore"`
 	// A 32x32 pixel PNG image.
@@ -69,18 +66,29 @@ type Dashing struct {
 	ExternalURL string `json: "externalURL"`
 }
 
-// Transform is a description of what should be done with a selector.
+// Selector is a description of what should be done with a selector.
 // When the Selectors map is unmarshaled, the values are turned into
-// Transform structs.
-type Transform struct {
-	Type        string
+// Selector structs.
+type Selector struct {
+	Type string `json:"type"`
+
+	Prefix string `json:"prefix"`
 
 	// Perform a replace operation on the text
-	Regexp      *regexp.Regexp
-	Replacement string
+	Regexp         string `json:"regexp"`
+	compiledRegexp *regexp.Regexp
+
+	Replacement string `json:"replacement"`
+
+	// CSS selector for ToC placement
+	Pattern         string `json:"pattern"`
+	compiledPattern *css.Selector
 
 	// Skip files that don't match this path
-	MatchPath		*regexp.Regexp
+	MatchPath         string `json:"matchpath"`
+	compiledMatchPath *regexp.Regexp
+
+	Files []string `json:"files"`
 }
 
 var ignoreHash map[string]bool
@@ -148,9 +156,15 @@ func create(c *cli.Context) {
 		Name:    "Dashing",
 		Package: "dashing",
 		Index:   "index.html",
-		Selectors: map[string]interface{}{
-			"title": "Package",
-			"dt a":  "Command",
+		Selectors: []*Selector{
+			&Selector{
+				Type:    "Package",
+				Pattern: "title",
+			},
+			&Selector{
+				Type:    "Command",
+				Pattern: "dt a",
+			},
 		},
 		Ignore: []string{"ABOUT"},
 	}
@@ -193,7 +207,7 @@ func build(c *cli.Context) {
 		fmt.Printf("Failed to parse JSON: %s", err)
 		os.Exit(1)
 	}
-	if err := decodeSelectField(&dashing); err != nil {
+	if err := dashing.compileSelectors(); err != nil {
 		fmt.Printf("Could not understand selector value: %s\n", err)
 		os.Exit(2)
 	}
@@ -218,50 +232,31 @@ func build(c *cli.Context) {
 	texasRanger(source, source_depth, name, dashing, db)
 }
 
-func decodeSelectField(d *Dashing) error {
-	d.selectors = make(map[string]*Transform, len(d.Selectors))
-	for sel, val := range d.Selectors {
-		var trans *Transform
-		rv := reflect.Indirect(reflect.ValueOf(val))
-		if rv.Kind() == reflect.String {
-			trans = &Transform{
-				Type: val.(string),
-			}
-		} else if rv.Kind() == reflect.Map {
-			val := val.(map[string]interface{})
-			var ttype, trep string
-			var creg, cmatchpath *regexp.Regexp
-			var err error
-
-			if r, ok := val["type"]; ok {
-				ttype = r.(string)
-			}
-			if r, ok := val["regexp"]; ok {
-				creg, err = regexp.Compile(r.(string))
-				if err != nil {
-					return fmt.Errorf("failed to compile regexp '%s': %s", r.(string), err)
-				}
-			}
-			if r, ok := val["replacement"]; ok {
-				trep = r.(string)
-			}
-			if r, ok := val["matchpath"]; ok {
-				cmatchpath, err = regexp.Compile(r.(string))
-				if err != nil {
-					return fmt.Errorf("failed to compile regexp '%s': %s", r.(string), err)
-				}
-			}
-			trans = &Transform{
-				Type:        ttype,
-				Regexp:      creg,
-				Replacement: trep,
-				MatchPath:   cmatchpath,
-			}
-		} else {
-			fmt.Errorf("Expected string or map. Kind is %s.", rv.Kind().String())
+func (d *Dashing) compileSelectors() error {
+	for _, s := range d.Selectors {
+		// compile regexp pattern
+		compiledRegexp, err := regexp.Compile(s.Regexp)
+		if err != nil {
+			return fmt.Errorf("Failed to compile Regexp pattern '%s': %s", s.Regexp, err)
 		}
-		d.selectors[sel] = trans
+
+		// compile css pattern
+		compiledPattern, err := css.Compile(s.Pattern)
+		if err != nil {
+			return fmt.Errorf("Failed to compile CSS pattern '%s': %s", s.Pattern, err)
+		}
+
+		// compile matchpath pattern
+		compiledMatchPath, err := regexp.Compile(s.MatchPath)
+		if err != nil {
+			return fmt.Errorf("Failed to compile MatchPath pattern '%s': %s", s.MatchPath, err)
+		}
+
+		s.compiledRegexp = compiledRegexp
+		s.compiledPattern = &compiledPattern
+		s.compiledMatchPath = compiledMatchPath
 	}
+
 	return nil
 }
 
@@ -437,29 +432,31 @@ func parseHTML(path string, source_depth int, dest string, dashing Dashing) ([]*
 	for _, node := range roots {
 		for i, attribute := range node.Attr {
 			if "href" == attribute.Key || "src" == attribute.Key {
-				if (strings.HasPrefix(attribute.Val, "/")) {
+				if strings.HasPrefix(attribute.Val, "/") {
 					// parts of the path - the file name - the source depth
-					path_depth := len(strings.Split(attribute.Val[1 :], "/")) - 1 - source_depth
+					path_depth := len(strings.Split(attribute.Val[1:], "/")) - 1 - source_depth
 					relative := ""
 					if path_depth > 0 {
 						strings.Repeat("../", path_depth)
 					}
-					node.Attr[i].Val = relative + attribute.Val[1 :];
+					node.Attr[i].Val = relative + attribute.Val[1:]
 				}
-				break;
+				break
 			}
 		}
 	}
 
-	for pattern, sel := range dashing.selectors {
-		// Skip this selector if file path doesn't match
-		if sel.MatchPath != nil && ! sel.MatchPath.MatchString(path) {
+	for _, s := range dashing.Selectors {
+		if len(s.Files) > 0 && !stringInSlice(path, s.Files) {
 			continue
 		}
 
-		m := css.MustCompile(pattern)
-		found := m.MatchAll(top)
-		for _, n := range found {
+		if s.MatchPath != "" && !s.compiledMatchPath.MatchString(path) {
+			fmt.Printf("Skipping path: %s\n", path)
+			continue
+		}
+
+		for _, n := range s.compiledPattern.MatchAll(top) {
 			name := text(n)
 
 			// Skip things explicitly ignored.
@@ -469,14 +466,18 @@ func parseHTML(path string, source_depth int, dest string, dashing Dashing) ([]*
 			}
 
 			// If we have a regexp, run it.
-			if sel.Regexp != nil {
-				name = sel.Regexp.ReplaceAllString(name, sel.Replacement)
+			if s.Regexp != "" {
+				name = s.compiledRegexp.ReplaceAllString(name, s.Replacement)
+			}
+
+			if s.Prefix != "" {
+				name = fmt.Sprintf("%s.%s", s.Prefix, name)
 			}
 
 			// References we want to track.
-			refs = append(refs, &reference{name, sel.Type, path + "#" + anchor(n)})
+			refs = append(refs, &reference{name, s.Type, path + "#" + anchor(n)})
 			// We need to modify the DOM with a special link to support TOC.
-			n.Parent.InsertBefore(newA(name, sel.Type), n)
+			n.Parent.InsertBefore(newA(name, s.Type), n)
 		}
 	}
 	return refs, writeHTML(path, dest, top)
@@ -573,6 +574,14 @@ func copyFile(src, dest string) error {
 	return err
 }
 
+func stringInSlice(needle string, haystack []string) bool {
+	for _, v := range haystack {
+		if needle == v {
+			return true
+		}
+	}
+	return false
+}
 
 var point_to_entity = map[rune]string{
 	8704: "&forall;",
