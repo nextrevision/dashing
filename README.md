@@ -56,10 +56,10 @@ The basic Dashing format looks like this:
     "icon32x32": "icon.png",
     "externalURL": "https://github.com/technosophos/dashing",
     "selectors": [
-      {
-        "pattern": "dt a",
-        "type": "Command",
-      }
+        {
+            "pattern": "dt a",
+            "type": "Command",
+        }
     ],
     "ignore": [
         "ABOUT"
@@ -81,16 +81,16 @@ type. The list of Dash data types can be found here: https://kapeli.com/docsets.
 
 ```json
 {
-  "selectors": [
-    {
-      "pattern": "h1 a",
-      "type": "Package",
-    },
-    {
-      "pattern": "h2.classdef a",
-      "type": "Class",
-    }
-  }
+    "selectors": [
+        {
+            "pattern": "h1 a",
+            "type": "Package",
+        },
+        {
+            "pattern": "h2.classdef a",
+            "type": "Class",
+        }
+    ]
 }
 ```
 
@@ -106,11 +106,17 @@ do that, you can use the `ignores` directive in the JSON file:
 
 ```json
 {
-  "selectors": {
-    "h1 a": "Package",
-    "h2.classdef a": "Class",
-  },
-  "ignore": ["DESCRIPTION", "MORE"]
+    "selectors": [
+        {
+            "pattern": "h1 a",
+            "type": "Package",
+        },
+        {
+            "pattern": "h2.classdef a",
+            "type": "Class",
+        }
+    ],
+    "ignore": ["DESCRIPTION", "MORE"]
 }
 ```
 
@@ -133,7 +139,7 @@ The format for this extended type of `selectors` looks like this:
     "selectors": [
         {
             "pattern": "dt a",
-            "type": "Command",
+            "type": "Command"
         },
         {
             "pattern": "title",
@@ -147,7 +153,7 @@ The format for this extended type of `selectors` looks like this:
             "type": "Package",
             "regexp": " - The Swiss Army Knife of Embedded Linux",
             "replacement": "",
-            "prefix": "Doc"
+            "prefix": "Doc",
             "files": [
                 "doc/api.xml",
                 "doc/api.xhtml"
