@@ -55,10 +55,12 @@ The basic Dashing format looks like this:
     "index":"index.html",
     "icon32x32": "icon.png",
     "externalURL": "https://github.com/technosophos/dashing",
-    "selectors": {
-        "dt a": "Command",
-        "title": "Package"
-    },
+    "selectors": [
+      {
+        "pattern": "dt a",
+        "type": "Command",
+      }
+    ],
     "ignore": [
         "ABOUT"
     ]
@@ -79,9 +81,15 @@ type. The list of Dash data types can be found here: https://kapeli.com/docsets.
 
 ```json
 {
-  "selectors": {
-    "h1 a": "Package",
-    "h2.classdef a": "Class",
+  "selectors": [
+    {
+      "pattern": "h1 a",
+      "type": "Package",
+    },
+    {
+      "pattern": "h2.classdef a",
+      "type": "Class",
+    }
   }
 }
 ```
@@ -122,15 +130,30 @@ The format for this extended type of `selectors` looks like this:
     "package":"busybox",
     "index":"BusyBox.html",
     "icon32x32":"busybox1.png",
-    "selectors": {
-        "dt a": "Command",
-        "title": {
-          "type":"Package",
-          "regexp": " - The Swiss Army Knife of Embedded Linux",
-          "replacement": "",
-          "matchpath": "doc/.*\\.html"
+    "selectors": [
+        {
+            "pattern": "dt a",
+            "type": "Command",
+        },
+        {
+            "pattern": "title",
+            "type": "Package",
+            "regexp": " - The Swiss Army Knife of Embedded Linux",
+            "replacement": "",
+            "matchpath": "doc/.*\\.html"
+        },
+        {
+            "pattern": "title",
+            "type": "Package",
+            "regexp": " - The Swiss Army Knife of Embedded Linux",
+            "replacement": "",
+            "prefix": "Doc"
+            "files": [
+                "doc/api.xml",
+                "doc/api.xhtml"
+            ]
         }
-    },
+    ],
     "ignore": [
         "ABOUT"
     ]
@@ -140,11 +163,14 @@ The format for this extended type of `selectors` looks like this:
 The format of the selector value is:
 
 ```json
-"css selector": {
-      "type":"Dash data type",
-      "regexp": "PCRE regular expression (no need to enclose in //)",
-      "replacement": "Replacement text for each match of 'regexp'",
-      "matchpath": "Only files matching this regular expression will be parsed. Will match all files if not set."
+{
+    "pattern": "css selector pattern",
+    "type": "Dash data type",
+    "regexp": "PCRE regular expression (no need to enclose in //)",
+    "replacement": "Replacement text for each match of 'regexp'",
+    "matchpath": "Only files matching this regular expression will be parsed. Will match all files if not set.",
+    "files": ["Array of files to explicitly match."],
+    "prefix": "String to prepend to the title of the Dash object; results in 'prefix.title'."
 }
 ```
 
