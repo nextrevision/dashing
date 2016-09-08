@@ -185,3 +185,24 @@ http://golang.org/pkg/regexp/syntax/
 
 Documentation on the format for `replacement` can be found here:
 http://golang.org/pkg/regexp/#Regexp.ReplaceAllString
+
+## BUILDING
+
+To build a new binary of this project, you first need [glide](https://github.com/Masterminds/glide) and [gox](https://github.com/mitchellh/gox):
+
+```
+go get -u github.com/Masterminds/glide
+go get -u github.com/mitchellh/gox
+```
+
+Install package dependencies:
+
+```
+glide install
+```
+
+Then build for OSX:
+
+```
+gox -cgo -osarch="darwin/amd64"
+```

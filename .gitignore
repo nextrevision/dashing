@@ -5,3 +5,4 @@ foo.docset/
 dashing
 busybox.docset/
 vendor/
+dashing_darwin_*
